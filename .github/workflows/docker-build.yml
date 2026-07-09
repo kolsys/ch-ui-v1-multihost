@@ -2,62 +2,22 @@ name: Build and Push Docker Image
 
 on:
   push:
-    branches:
-      - master
-      - develop
-  pull_request:
-    branches:
-      - master
-    paths:
-      - 'src/**'
-      - 'public/**'
-      - 'package*.json'
-      - 'bun.lock'
-      - 'Dockerfile*'
-      - 'inject-env.cjs'
-      - '.github/workflows/docker-build.yml'
+    tags:
+      - 'v*'
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  # Job to determine what changed and if we should build
-  changes:
-    runs-on: ubuntu-latest
-    permissions:
-      pull-requests: read
-    outputs:
-      docker: ${{ steps.filter.outputs.docker }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v2
-        id: filter
-        with:
-          filters: |
-            docker:
-              - 'src/**'
-              - 'public/**'
-              - 'package*.json'
-              - 'bun.lock'
-              - 'Dockerfile*'
-              - 'inject-env.cjs'
-
   build:
-    needs: [changes]
-    if: |
-      (needs.changes.outputs.docker == 'true' || github.event_name == 'push') &&
-      !contains(github.event.head_commit.message, '[skip docker]') &&
-      !contains(github.event.head_commit.message, '[skip ci]') &&
-      !contains(github.event.head_commit.message, '[docs-only]') &&
-      !contains(github.event.head_commit.message, 'docs-only')
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
       id-token: write  # For attestation and signing
       security-events: write  # For security scanning
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -65,7 +25,6 @@ jobs:
           fetch-depth: 0  # Full history for better metadata
 
       - name: Install cosign
-        if: github.event_name != 'pull_request'
         uses: sigstore/cosign-installer@v3
         with:
           cosign-release: 'v2.2.2'
@@ -79,7 +38,6 @@ jobs:
           buildkitd-flags: --debug
 
       - name: Log in to GitHub Container Registry
-        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -94,19 +52,10 @@ jobs:
           echo "variant=bun" >> $GITHUB_OUTPUT
           echo "📦 Using Bun Dockerfile for faster builds"
 
-          # Extract version from package.json
-          VERSION=$(node -p "require('./package.json').version")
+          # Version comes from the pushed tag (e.g. v1.2.3 -> 1.2.3)
+          VERSION="${GITHUB_REF_NAME#v}"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "📌 Version: $VERSION"
-
-          # Determine if this is a stable release (master branch builds are considered stable)
-          if [[ "${{ github.ref }}" == "refs/heads/master" ]]; then
-            echo "stable=true" >> $GITHUB_OUTPUT
-            echo "✅ Stable release detected"
-          else
-            echo "stable=false" >> $GITHUB_OUTPUT
-            echo "🚧 Development build"
-          fi
 
       - name: Extract metadata
         id: meta
@@ -115,20 +64,14 @@ jobs:
           images: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            # Latest tag for main branch
-            type=raw,value=latest,enable={{is_default_branch}}
-            
-            # Version from package.json for main branch
-            type=raw,value=${{ steps.build_config.outputs.version }},enable={{is_default_branch}}
-            
-            # Branch tags (develop, etc.)
-            type=ref,event=branch
-            
-            # SHA tags for precise tracking
+            # Every tag build is also published as latest
+            type=raw,value=latest
+
+            # Version tag, derived from the git tag (v1.2.3 -> 1.2.3)
+            type=raw,value=${{ steps.build_config.outputs.version }}
+
+            # SHA tag for precise tracking
             type=sha,format=short,prefix=sha-
-            
-            # PR tags (not pushed, just for testing)
-            type=ref,event=pr
           labels: |
             org.opencontainers.image.title=CH-UI v1 Multihost
             org.opencontainers.image.description=A modern, feature-rich web interface for ClickHouse databases. Fork of CH-UI v1.9 with multi-host support.
@@ -147,7 +90,7 @@ jobs:
           context: .
           file: ${{ steps.build_config.outputs.dockerfile }}
           platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
@@ -162,15 +105,15 @@ jobs:
           sbom: true
 
       - name: Export digest
-        if: github.event_name != 'pull_request' && steps.build.outputs.digest != ''
+        if: steps.build.outputs.digest != ''
         run: |
           echo "Image digest: ${{ steps.build.outputs.digest }}"
 
       - name: Scan for vulnerabilities
         uses: aquasecurity/trivy-action@master
-        if: github.event_name != 'pull_request' && steps.build.outputs.imageid != ''
+        if: steps.build.outputs.imageid != ''
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.build_config.outputs.version }}
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
@@ -178,30 +121,27 @@ jobs:
 
       - name: Upload Trivy results to GitHub Security
         uses: github/codeql-action/upload-sarif@v3
-        if: github.event_name != 'pull_request'
         with:
           sarif_file: 'trivy-results.sarif'
           category: 'container-security'
 
       - name: Generate SBOM
         uses: anchore/sbom-action@v0
-        if: github.event_name != 'pull_request' && steps.build.outputs.imageid != ''
+        if: steps.build.outputs.imageid != ''
         with:
-          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.build_config.outputs.version }}
           format: spdx-json
           output-file: sbom.spdx.json
 
       - name: Upload SBOM
         uses: actions/upload-artifact@v4
-        if: github.event_name != 'pull_request'
         with:
           name: sbom
           path: sbom.spdx.json
           retention-days: 30
 
-
       - name: Sign the container image
-        if: ${{ github.event_name != 'pull_request' && steps.build_config.outputs.stable == 'true' && steps.build.outputs.digest != '' }}
+        if: steps.build.outputs.digest != ''
         env:
           COSIGN_EXPERIMENTAL: 1
         run: |
@@ -217,31 +157,27 @@ jobs:
           echo "## 🏗️ Build Information" >> $GITHUB_STEP_SUMMARY
           echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Tag | \`${{ github.ref_name }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Version | \`${{ steps.build_config.outputs.version }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Variant | \`${{ steps.build_config.outputs.variant }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Stable | ${{ steps.build_config.outputs.stable == 'true' && '✅ Yes' || '🚧 No' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Platforms | \`linux/amd64, linux/arm64\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Registry | \`${{ env.REGISTRY }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          
-          if [ "${{ github.event_name }}" != "pull_request" ]; then
-            echo "## 🏷️ Docker Tags" >> $GITHUB_STEP_SUMMARY
-            echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
-            echo "# Pull the image:" >> $GITHUB_STEP_SUMMARY
-            echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_STEP_SUMMARY
-            echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.build_config.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            
-            echo "## 🔐 Security" >> $GITHUB_STEP_SUMMARY
-            echo "- ✅ Vulnerability scan completed" >> $GITHUB_STEP_SUMMARY
-            echo "- ✅ SBOM generated" >> $GITHUB_STEP_SUMMARY
-            if [ "${{ steps.build_config.outputs.stable }}" == "true" ]; then
-              echo "- ✅ Image signed with cosign" >> $GITHUB_STEP_SUMMARY
-            fi
-          fi
-          
+
+          echo "## 🏷️ Docker Tags" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "# Pull the image:" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.build_config.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "## 🔐 Security" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Vulnerability scan completed" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ SBOM generated" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Image signed with cosign" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
           echo "## 📝 Commit Information" >> $GITHUB_STEP_SUMMARY
           echo "- SHA: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- Author: @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
