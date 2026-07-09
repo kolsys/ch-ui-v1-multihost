@@ -3,6 +3,7 @@ import { createClient } from "@clickhouse/client-web";
 import * as monaco from "monaco-editor";
 import { format } from "sql-formatter";
 import { appQueries } from "./appQueries";
+import { parseCustomParams } from "@/lib/connectionParams";
 
 // Add this declaration to extend the Window interface
 declare global {
@@ -39,6 +40,7 @@ function initializeClickHouseClient(
       pathname: credential.customPath,
       username: credential.username,
       password: credential.password || "", // Allow empty password
+      clickhouse_settings: parseCustomParams(credential.customParams),
     });
   } else {
     console.warn("Invalid or missing ClickHouse credentials:", credential);
@@ -122,6 +124,21 @@ let functionsCache: string[] | null = null;
 
 // cache for keywords
 let keywordsCache: string[] | null = null;
+
+/**
+ * Recreates the ClickHouse client and drops schema caches after the
+ * active connection changes, so autocomplete reflects the new server.
+ */
+export function reinitializeMonacoClient(): void {
+  const appStore = localStorage.getItem("app-storage");
+  const state = appStore ? JSON.parse(appStore) : {};
+  const credential = state.state?.credential || {};
+  client = null;
+  dbStructureCache = null;
+  functionsCache = null;
+  keywordsCache = null;
+  initializeClickHouseClient(appStore, state, credential);
+}
 
 // Setting up the Monaco Environment to use the editor worker
 window.MonacoEnvironment = {

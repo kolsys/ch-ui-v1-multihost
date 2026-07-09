@@ -15,6 +15,16 @@ export interface Credential {
   customPath: string;
   isDistributed?: boolean;
   clusterName?: string;
+  customParams?: string;
+}
+
+export type ConnectionEnvironment = "dev" | "staging" | "prod";
+
+export interface SavedConnection {
+  id: string;
+  name: string;
+  environment: ConnectionEnvironment;
+  credential: Credential;
 }
 
 export interface DatabaseInfo {
@@ -67,6 +77,8 @@ export interface QueryResult {
 
 interface CoreState {
   credential: Credential;
+  savedConnections: SavedConnection[];
+  activeConnectionId: string | null;
   clickHouseClient: ClickHouseClient | null;
   isLoadingCredentials: boolean;
   isServerAvailable: boolean;
@@ -110,6 +122,9 @@ export interface AppState
     ExplorerState,
     AdminState {
   setCredential: (credential: Credential) => Promise<void>;
+  saveConnection: (connection: SavedConnection) => void;
+  deleteConnection: (id: string) => void;
+  switchConnection: (id: string) => Promise<void>;
   clearCredentials: () => Promise<void>;
   checkServerStatus: () => Promise<void>;
   runQuery: (query: string, tabId?: string) => Promise<QueryResult>;

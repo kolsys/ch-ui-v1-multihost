@@ -8,8 +8,10 @@ import {
   ClickHouseSettings,
   QueryResult,
   SavedQuery,
+  SavedConnection,
 } from "@/types/common";
 import { createClient } from "@clickhouse/client-web";
+import { parseCustomParams } from "@/lib/connectionParams";
 import { isCreateOrInsert } from "@/helpers/sqlUtils";
 import { OverflowMode } from "@clickhouse/client-common/dist/settings";
 import { toast } from "sonner";
@@ -180,6 +182,8 @@ const useAppStore = create<AppState>()(
           customPath: "",
           requestTimeout: 30000,
         },
+        savedConnections: [],
+        activeConnectionId: null,
         clickHouseClient: null,
         isLoadingCredentials: false,
         isServerAvailable: false,
@@ -217,6 +221,9 @@ const useAppStore = create<AppState>()(
               clickhouse_settings: {
                 ...get().clickhouseSettings,
                 result_overflow_mode: "break",
+                ...(parseCustomParams(
+                  credential.customParams
+                ) as ClickHouseSettings),
               },
             });
             set({ clickHouseClient: client });
@@ -246,6 +253,58 @@ const useAppStore = create<AppState>()(
         },
 
         /**
+         * Adds a new saved connection or updates an existing one (matched by id)
+         * and makes it the active connection.
+         */
+        saveConnection: (connection: SavedConnection) => {
+          set((state) => {
+            const exists = state.savedConnections.some(
+              (c) => c.id === connection.id
+            );
+            return {
+              savedConnections: exists
+                ? state.savedConnections.map((c) =>
+                    c.id === connection.id ? connection : c
+                  )
+                : [...state.savedConnections, connection],
+              activeConnectionId: connection.id,
+            };
+          });
+        },
+
+        /**
+         * Removes a saved connection. The live client is kept as-is;
+         * only the bookmark disappears.
+         */
+        deleteConnection: (id: string) => {
+          set((state) => ({
+            savedConnections: state.savedConnections.filter(
+              (c) => c.id !== id
+            ),
+            activeConnectionId:
+              state.activeConnectionId === id
+                ? null
+                : state.activeConnectionId,
+          }));
+        },
+
+        /**
+         * Switches the live client to one of the saved connections.
+         * activeConnectionId is set only after the new client is in place —
+         * pages are remounted by keying <Routes> on it, so their mount
+         * effects must already see the new connection.
+         */
+        switchConnection: async (id: string) => {
+          const connection = get().savedConnections.find((c) => c.id === id);
+          if (!connection) {
+            toast.error("Saved connection not found");
+            return;
+          }
+          await get().setCredential(connection.credential);
+          set({ activeConnectionId: id });
+        },
+
+        /**
          * Updates ClickHouse configuration and re-checks the server status.
          * Uses enhanced error handling for better user feedback.
          */
@@ -259,7 +318,12 @@ const useAppStore = create<AppState>()(
               username: credentials.username,
               password: credentials.password || "",
               request_timeout: credentials.requestTimeout || 30000,
-              clickhouse_settings: clickhouseSettings,
+              clickhouse_settings: {
+                ...clickhouseSettings,
+                ...(parseCustomParams(
+                  credentials.customParams
+                ) as ClickHouseSettings),
+              },
             });
             set({ clickHouseClient: client, clickhouseSettings });
             await get().checkServerStatus();
@@ -296,6 +360,7 @@ const useAppStore = create<AppState>()(
               result_overflow_mode: "break" as OverflowMode,
             },
             clickHouseClient: null,
+            activeConnectionId: null,
             isServerAvailable: false,
             version: "",
             error: "",
@@ -1056,6 +1121,8 @@ const useAppStore = create<AppState>()(
       // Persist subset of the state to localStorage
       partialize: (state) => ({
         credential: state.credential,
+        savedConnections: state.savedConnections,
+        activeConnectionId: state.activeConnectionId,
         activeTab: state.activeTab,
         tabs: state.tabs.map((t) => ({
           ...t,

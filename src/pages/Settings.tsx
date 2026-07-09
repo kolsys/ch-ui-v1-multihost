@@ -16,6 +16,10 @@ import {
   FileClock,
   Share2,
   Trash2,
+  Database,
+  Pencil,
+  Plus,
+  Tag,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -45,10 +49,29 @@ import {
 } from "@/components/ui/tooltip";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import useAppStore from "@/store";
-import { retryInitialization } from "@/features/workspace/editor/monacoConfig";
+import { reinitializeMonacoClient } from "@/features/workspace/editor/monacoConfig";
+import {
+  Credential,
+  ConnectionEnvironment,
+  SavedConnection,
+} from "@/types/common";
+import {
+  ENVIRONMENTS,
+  ENV_BADGE_CLASS,
+  ENV_DOT_CLASS,
+  ENV_LABEL,
+} from "@/lib/environments";
 
 // Custom URL validator that accepts both standard URLs and IP addresses with ports
 const isValidClickHouseUrl = (url: string): boolean => {
@@ -95,6 +118,8 @@ const isValidClickHouseUrl = (url: string): boolean => {
 };
 
 const formSchema = z.object({
+  connectionName: z.string().optional(),
+  environment: z.enum(["dev", "staging", "prod"]).optional(),
   url: z.string().min(1, "URL is required").refine(isValidClickHouseUrl, {
     message:
       "Invalid URL. Please use format: http://hostname:port or http://ip-address:port",
@@ -103,6 +128,21 @@ const formSchema = z.object({
   password: z.string().optional(),
   useAdvanced: z.boolean().optional(),
   customPath: z.string().optional(),
+  customParams: z
+    .string()
+    .optional()
+    .refine(
+      (value) =>
+        !value ||
+        value
+          .split(/[&,\s]+/)
+          .filter(Boolean)
+          .every((pair) => /^[\w.]+=[^=]*$/.test(pair)),
+      {
+        message:
+          "Expected key=value pairs separated by &, comma or space (e.g. enable_analyzer=0&max_execution_time=300)",
+      }
+    ),
   requestTimeout: z.coerce
     .number()
     .int("Request timeout must be a whole number")
@@ -126,8 +166,16 @@ export default function SettingsPage() {
     credentialSource,
     setCredentialSource,
     clearLocalData,
+    savedConnections,
+    activeConnectionId,
+    saveConnection,
+    deleteConnection,
+    switchConnection,
   } = useAppStore();
 
+  const [editingId, setEditingId] = useState<string | null>(
+    activeConnectionId
+  );
   const [showPassword, setShowPassword] = useState(false);
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
   const [showDistributedSettings, setShowDistributedSettings] = useState(
@@ -136,26 +184,25 @@ export default function SettingsPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
-  const currentFormValues = {
-    url: credential?.url,
-    username: credential?.username,
-    password: credential?.password,
-    requestTimeout: credential?.requestTimeout,
-  };
-
   type FormData = {
+    connectionName?: string;
+    environment?: ConnectionEnvironment;
     url: string;
     username: string;
     password?: string;
     useAdvanced?: boolean;
     customPath?: string;
+    customParams?: string;
     requestTimeout: unknown;
     isDistributed?: boolean;
     clusterName?: string;
   };
+  const editingConnection = savedConnections.find((c) => c.id === editingId);
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
+      connectionName: editingConnection?.name || "",
+      environment: editingConnection?.environment || "dev",
       url: searchParams.get("url") || credential?.url || "",
       username: searchParams.get("username") || credential?.username || "",
       password: searchParams.get("password") || credential?.password || "",
@@ -165,6 +212,8 @@ export default function SettingsPage() {
         30000,
       useAdvanced: searchParams.get("useAdvanced") === "true" || false,
       customPath: searchParams.get("customPath") || "",
+      customParams:
+        searchParams.get("customParams") || credential?.customParams || "",
       isDistributed:
         searchParams.get("isDistributed") === "true" ||
         credential?.isDistributed ||
@@ -176,6 +225,8 @@ export default function SettingsPage() {
 
   useEffect(() => {
     form.reset({
+      connectionName: editingConnection?.name || "",
+      environment: editingConnection?.environment || "dev",
       url: searchParams.get("url") || credential?.url || "",
       username: searchParams.get("username") || credential?.username || "",
       password: searchParams.get("password") || credential?.password || "",
@@ -185,6 +236,8 @@ export default function SettingsPage() {
         30000,
       useAdvanced: searchParams.get("useAdvanced") === "true" || false,
       customPath: searchParams.get("customPath") || "",
+      customParams:
+        searchParams.get("customParams") || credential?.customParams || "",
       isDistributed:
         searchParams.get("isDistributed") === "true" ||
         credential?.isDistributed ||
@@ -200,39 +253,97 @@ export default function SettingsPage() {
 
   const onSubmit = async (values: FormData) => {
     try {
-      if (
-        values.url === currentFormValues.url &&
-        values.username === currentFormValues.username &&
-        values.password === currentFormValues.password &&
-        values.requestTimeout === currentFormValues.requestTimeout &&
-        isServerAvailable
-      ) {
-        toast.info("No changes detected.");
-        return;
-      }
-
       let url = values.url;
       if (values.useAdvanced && values.customPath) {
         url = `${values.url}/${values.customPath}`;
       }
 
-      await setCredential({
-        ...values,
+      const credentialToSave: Credential = {
         url,
+        username: values.username,
         password: values.password || "",
         useAdvanced: values.useAdvanced || false,
         customPath: values.customPath || "",
+        customParams: values.customParams?.trim() || "",
         requestTimeout: Number(values.requestTimeout), // Ensure type is number
+        isDistributed: values.isDistributed || false,
+        clusterName: values.clusterName || "",
+      };
+
+      let name = values.connectionName?.trim() || "";
+      if (!name) {
+        try {
+          name = new URL(values.url).host;
+        } catch {
+          name = values.url;
+        }
+      }
+      const id = editingId ?? `conn-${Date.now().toString(36)}`;
+      saveConnection({
+        id,
+        name,
+        environment: values.environment || "dev",
+        credential: credentialToSave,
       });
+      setEditingId(id);
+
+      await setCredential(credentialToSave);
       await checkServerStatus();
       setCredentialSource("app");
-      await retryInitialization();
+      reinitializeMonacoClient();
     } catch (error) {
       toast.error("Error saving credentials: " + (error as Error).message);
     }
   };
 
+  const resetFormTo = (conn?: SavedConnection) => {
+    const c = conn?.credential;
+    form.reset({
+      connectionName: conn?.name || "",
+      environment: conn?.environment || "dev",
+      url: c?.url || "",
+      username: c?.username || "",
+      password: c?.password || "",
+      requestTimeout: c?.requestTimeout || 30000,
+      useAdvanced: c?.useAdvanced || false,
+      customPath: c?.customPath || "",
+      customParams: c?.customParams || "",
+      isDistributed: c?.isDistributed || false,
+      clusterName: c?.clusterName || "",
+    });
+    setShowAdvancedSettings(!!c?.useAdvanced);
+    setShowDistributedSettings(!!c?.isDistributed);
+  };
+
+  const handleConnectSaved = async (id: string) => {
+    const conn = savedConnections.find((c) => c.id === id);
+    if (!conn) return;
+    setEditingId(id);
+    resetFormTo(conn);
+    await switchConnection(id);
+    reinitializeMonacoClient();
+  };
+
+  const handleEditSaved = (conn: SavedConnection) => {
+    setEditingId(conn.id);
+    resetFormTo(conn);
+  };
+
+  const handleNewConnection = () => {
+    setEditingId(null);
+    resetFormTo(undefined);
+  };
+
+  const handleDeleteSaved = (id: string) => {
+    const confirmed = window.confirm("Delete this saved connection?");
+    if (!confirmed) return;
+    deleteConnection(id);
+    if (editingId === id) setEditingId(null);
+    toast.success("Connection deleted");
+  };
+
   const handleDisconnect = () => {
+    setEditingId(null);
     clearCredentials();
     form.reset({
       url: "",
@@ -323,12 +434,108 @@ export default function SettingsPage() {
               </Alert>
             )}
 
+            {credentialSource !== "env" && savedConnections.length > 0 && (
+              <Card className="shadow-lg border-muted">
+                <CardHeader>
+                  <CardTitle className="text-2xl font-bold flex items-center gap-2">
+                    <Database className="h-6 w-6 text-primary" />
+                    Saved Connections
+                  </CardTitle>
+                  <CardDescription>
+                    Switch between environments or edit a saved connection.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {savedConnections.map((conn) => (
+                    <div
+                      key={conn.id}
+                      className={`flex items-center gap-3 rounded-md border p-3 ${
+                        conn.id === activeConnectionId
+                          ? "border-primary/50 bg-muted/50"
+                          : ""
+                      }`}
+                    >
+                      <span
+                        className={`h-2.5 w-2.5 rounded-full shrink-0 ${
+                          ENV_DOT_CLASS[conn.environment]
+                        }`}
+                      />
+                      <div className="min-w-0 flex-grow">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium truncate">
+                            {conn.name}
+                          </span>
+                          <span
+                            className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold ${
+                              ENV_BADGE_CLASS[conn.environment]
+                            }`}
+                          >
+                            {ENV_LABEL[conn.environment]}
+                          </span>
+                          {conn.id === activeConnectionId &&
+                            isServerAvailable && (
+                              <Badge variant="secondary" className="shrink-0">
+                                active
+                              </Badge>
+                            )}
+                        </div>
+                        <p className="text-xs text-muted-foreground font-mono truncate">
+                          {conn.credential.url} · {conn.credential.username}
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={
+                          isLoadingCredentials ||
+                          (conn.id === activeConnectionId && isServerAvailable)
+                        }
+                        onClick={() => handleConnectSaved(conn.id)}
+                      >
+                        Connect
+                      </Button>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => handleEditSaved(conn)}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Edit in the form below</TooltipContent>
+                      </Tooltip>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => handleDeleteSaved(conn.id)}
+                      >
+                        <Trash2 className="h-4 w-4 text-red-500" />
+                      </Button>
+                    </div>
+                  ))}
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="mt-2"
+                    onClick={handleNewConnection}
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    New connection
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+
             {credentialSource !== "env" && (
               <Card className="shadow-lg border-muted">
                 <CardHeader>
                   <CardTitle className="text-2xl font-bold flex items-center gap-2">
                     <Settings className="h-6 w-6 text-primary" />
-                    Connection Settings
+                    {editingConnection
+                      ? `Connection Settings — ${editingConnection.name}`
+                      : "New Connection"}
                   </CardTitle>
                 </CardHeader>
 
@@ -339,6 +546,68 @@ export default function SettingsPage() {
                       className="space-y-6"
                     >
                       <div className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                          <FormField
+                            control={form.control}
+                            name="connectionName"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className="flex items-center gap-2">
+                                  <Tag className="h-4 w-4" />
+                                  Connection Name
+                                </FormLabel>
+                                <FormControl>
+                                  <Input
+                                    disabled={isLoadingCredentials}
+                                    placeholder="Local dev"
+                                    {...field}
+                                  />
+                                </FormControl>
+                                <FormDescription className="text-xs">
+                                  Defaults to the host if left empty
+                                </FormDescription>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={form.control}
+                            name="environment"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Environment</FormLabel>
+                                <Select
+                                  onValueChange={field.onChange}
+                                  value={field.value || "dev"}
+                                  disabled={isLoadingCredentials}
+                                >
+                                  <FormControl>
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="dev" />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    {ENVIRONMENTS.map((env) => (
+                                      <SelectItem key={env} value={env}>
+                                        <span className="flex items-center gap-2">
+                                          <span
+                                            className={`h-2.5 w-2.5 rounded-full ${ENV_DOT_CLASS[env]}`}
+                                          />
+                                          {ENV_LABEL[env]}
+                                        </span>
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <FormDescription className="text-xs">
+                                  Colors the connection badge everywhere
+                                </FormDescription>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+
                         <FormField
                           control={form.control}
                           name="url"
@@ -519,6 +788,33 @@ export default function SettingsPage() {
                               <FormDescription className="text-xs">
                                 Set the request timeout in milliseconds. Must be
                                 between 1000 and 600000. (Default: 30000)
+                              </FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name="customParams"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="flex items-center gap-2">
+                                <Cog className="h-4 w-4" />
+                                Custom Params
+                              </FormLabel>
+                              <FormControl>
+                                <Input
+                                  className="font-mono"
+                                  disabled={isLoadingCredentials}
+                                  placeholder="enable_analyzer=0&max_execution_time=300"
+                                  {...field}
+                                />
+                              </FormControl>
+                              <FormDescription className="text-xs">
+                                ClickHouse settings applied to every query of
+                                this connection: key=value pairs separated by
+                                &amp;, comma or space
                               </FormDescription>
                               <FormMessage />
                             </FormItem>

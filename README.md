@@ -1,7 +1,16 @@
-# CH-UI 🚀
+# CH-UI v1 Multihost 🚀
 
-[![Version](https://img.shields.io/github/v/release/caioricciuti/ch-ui?label=version&style=flat-square)](https://github.com/caioricciuti/ch-ui/releases)
+[![Version](https://img.shields.io/github/v/release/kolsys/ch-ui-v1-multihost?label=version&style=flat-square)](https://github.com/kolsys/ch-ui-v1-multihost/releases)
+
+> **This is a fork of [CH-UI](https://github.com/caioricciuti/ch-ui) v1.9.0** — the last release of the v1 line — created by [Caio Ricciuti](https://github.com/caioricciuti). The fork extends the original with **multi-host support** (multiple saved connections with environment labels) and **custom connection parameters**. See [What This Fork Adds](#-what-this-fork-adds). All credit for the original project goes to its author.
+
 A modern, feature-rich web interface for ClickHouse databases. CH-UI provides an intuitive platform for managing ClickHouse databases, executing queries, and visualizing metrics about your instance.
+
+## ✨ What This Fork Adds
+
+- **🖧 Multi-Host Connections**: Save multiple ClickHouse connections and switch between them on the fly — no more re-entering credentials when you work with several hosts.
+- **🏷️ Environment Labels**: Tag each connection as `DEV`, `STAGING` or `PROD` and get a color-coded environment indicator in the UI, so you always know which host you are querying.
+- **⚙️ Custom Connection Parameters**: Pass arbitrary ClickHouse settings per connection as a `key=value` list (e.g. `enable_analyzer=0&max_execution_time=300`) — applied to every query on that connection.
 
 ## 🌟 Key Features
 
@@ -71,7 +80,7 @@ A modern, feature-rich web interface for ClickHouse databases. CH-UI provides an
 
 #### Simple Start
 ```bash
-docker run --name ch-ui -p 5521:5521 ghcr.io/caioricciuti/ch-ui:latest
+docker run --name ch-ui -p 5521:5521 ghcr.io/kolsys/ch-ui-v1-multihost:latest
 ```
 
 #### Using Docker Compose
@@ -79,7 +88,7 @@ Create a `docker-compose.yml`:
 ```yaml
 services:
   ch-ui:
-    image: ghcr.io/caioricciuti/ch-ui:latest
+    image: ghcr.io/kolsys/ch-ui-v1-multihost:latest
     restart: always
     ports:
       - "5521:5521"
@@ -125,7 +134,7 @@ docker-compose up -d
 ```yaml
 services:
   ch-ui:
-    image: ghcr.io/caioricciuti/ch-ui:latest
+    image: ghcr.io/kolsys/ch-ui-v1-multihost:latest
     restart: always
     ports:
       - "5521:5521"
@@ -155,7 +164,7 @@ docker run --name ch-ui -p 5521:5521 \
   -e VITE_CLICKHOUSE_CUSTOM_PATH=/custom/path \
   -e VITE_CLICKHOUSE_REQUEST_TIMEOUT=60000 \
   -e VITE_BASE_PATH=/ch-ui \
-  ghcr.io/caioricciuti/ch-ui:latest
+  ghcr.io/kolsys/ch-ui-v1-multihost:latest
 ```
 
 ### Option 2: Build from Source
@@ -167,10 +176,10 @@ docker run --name ch-ui -p 5521:5521 \
 #### Installation Steps
 ```bash
 # Clone the repository
-git clone https://github.com/caioricciuti/ch-ui.git
+git clone https://github.com/kolsys/ch-ui-v1-multihost.git
 
 # Navigate to project directory
-cd ch-ui
+cd ch-ui-v1-multihost
 
 # Install dependencies
 npm install
@@ -237,7 +246,7 @@ server {
 ```yaml
 services:
   ch-ui:
-    image: ghcr.io/caioricciuti/ch-ui:latest
+    image: ghcr.io/kolsys/ch-ui-v1-multihost:latest
     restart: always
     ports:
       - "127.0.0.1:5521:5521"  # Only bind to localhost
@@ -307,7 +316,7 @@ In your Settings page, enable "Distributed Mode" and specify your cluster name. 
 
 #### Environment Variables Not Working
 If environment variables aren't being applied:
-1. Ensure you're using the latest image: `docker pull ghcr.io/caioricciuti/ch-ui:latest`
+1. Ensure you're using the latest image: `docker pull ghcr.io/kolsys/ch-ui-v1-multihost:latest`
 2. Check logs: `docker logs ch-ui`
 3. Verify variables are set: The logs should show which variables are SET/NOT SET
 
@@ -327,9 +336,7 @@ No configuration needed - this works automatically.
 
 ## 📚 Documentation
 
-![Website](https://img.shields.io/website?url=https%3A%2F%2Fch-ui.com)
-
-For detailed documentation, visit our [official documentation](https://ch-ui.com/docs/getting-started?utm_source=ch-ui&utm_medium=gitHubReadme).
+Documentation for the base functionality lives in the [`docs/`](./docs) directory of this repository. The original project's website is at [ch-ui.com](https://ch-ui.com) (it now covers CH-UI V2, a separate product unrelated to this fork).
 
 ## 🔄 Migration Guide
 
@@ -355,8 +362,8 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ### Development Setup
 ```bash
 # Clone and install
-git clone https://github.com/caioricciuti/ch-ui.git
-cd ch-ui
+git clone https://github.com/kolsys/ch-ui-v1-multihost.git
+cd ch-ui-v1-multihost
 bun install
 
 # Run tests
@@ -379,9 +386,9 @@ bun run dev
   <p><strong>Iberodata</strong> - Empowering businesses with data-driven solutions</p>
 </div>
 
-## ☕ Support the Project
+## ☕ Support the Original Author
 
-If you find CH-UI helpful, consider supporting its development:
+This fork builds on the work of Caio Ricciuti. If you find CH-UI helpful, consider supporting the original project:
 
 <div align="center">
   <a href="https://buymeacoffee.com/caioricciuti?utm_source=ch-ui&utm_medium=github">
@@ -389,11 +396,9 @@ If you find CH-UI helpful, consider supporting its development:
   </a>
 </div>
 
-Your support helps maintain and improve CH-UI! ✨
-
 ## 📄 License
 
-This project is licensed under the Apache License 2.0 - see the [LICENSE](./LICENSE.md) file for details.
+This project is licensed under the Apache License 2.0 - see the [LICENSE](./LICENSE.md) file for details. See [NOTICE](./NOTICE.md) for attribution.
 
 
-Made with ❤️ by [Caio Ricciuti](https://github.com/caioricciuti)
+Original CH-UI made with ❤️ by [Caio Ricciuti](https://github.com/caioricciuti). Multi-host fork maintained at [kolsys/ch-ui-v1-multihost](https://github.com/kolsys/ch-ui-v1-multihost).

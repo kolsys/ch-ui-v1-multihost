@@ -13,7 +13,6 @@ import {
   Copy,
   Save,
   PlusCircleIcon,
-  ArrowUpNarrowWide,
 } from "lucide-react";
 import {
   DndContext,
@@ -43,7 +42,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 
 interface Tab {
   id: string;
@@ -283,13 +282,6 @@ function WorkspaceTabs() {
             </ContextMenu>
             <ScrollBar orientation="horizontal" />
           </ScrollArea>
-          <Link
-            className="rounded-none p-2 bg-muted"
-            to="https://ch-ui.com?utm_source=ch-ui-oss&utm_medium=tab_bar"
-            target="_blank"
-          >
-            <ArrowUpNarrowWide className="h-6 w-6 text-orange-500 stroke-3" />
-          </Link>
         </div>
         <div className="flex flex-col flex-1">
           {sortedTabs.map((tab) => (

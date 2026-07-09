@@ -18,7 +18,8 @@ import {
   ShieldCheck,
   CogIcon,
   ScrollText,
-  ArrowUpWideNarrow,
+  Database,
+  Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -36,6 +37,20 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  ENV_BADGE_CLASS,
+  ENV_DOT_CLASS,
+  ENV_LABEL,
+} from "@/lib/environments";
+import { reinitializeMonacoClient } from "@/features/workspace/editor/monacoConfig";
 import {
   Table,
   TableBody,
@@ -97,6 +112,9 @@ const Sidebar = () => {
     isLoadingCredentials,
     clearCredentials,
     isAdmin,
+    savedConnections,
+    activeConnectionId,
+    switchConnection,
   } = useAppStore();
   const location = useLocation();
   const navigate = useNavigate();
@@ -109,6 +127,22 @@ const Sidebar = () => {
 
   const toggleTheme = () => {
     setTheme(theme === "dark" ? "light" : "dark");
+  };
+
+  const activeConnection = savedConnections.find(
+    (c) => c.id === activeConnectionId
+  );
+
+  const handleSwitchConnection = async (id: string) => {
+    if (id === activeConnectionId) return;
+    const target = savedConnections.find((c) => c.id === id);
+    await switchConnection(id);
+    reinitializeMonacoClient();
+    if (target) {
+      toast.success(
+        `Switched to ${target.name} (${ENV_LABEL[target.environment]})`
+      );
+    }
   };
 
   useEffect(() => {
@@ -140,32 +174,24 @@ const Sidebar = () => {
   const bottomNavLinks = [
     { to: "/settings", label: "Settings", icon: CogIcon, isNewWindow: false },
     {
-      to: "https://github.com/caioricciuti/ch-ui?utm_source=ch-ui&utm_medium=sidebar",
+      to: "https://github.com/kolsys/ch-ui-v1-multihost",
       label: "GitHub",
       icon: Github,
       isNewWindow: true,
     },
     {
-      to: "https://ch-ui.com/getting-started?utm_source=ch-ui&utm_medium=sidebar",
+      to: "https://github.com/kolsys/ch-ui-v1-multihost#readme",
       label: "Documentation",
       icon: BookText,
       isNewWindow: true,
     },
-    {
-      to: "https://ch-ui.com?utm_source=ch-ui-oss&utm_medium=sidebar",
-      label: "CH-UI V2",
-      icon: ArrowUpWideNarrow,
-      iconColor: 'orange-500',
-      isNewWindow: true,
-    }
   ];
 
   return (
     <div
       ref={sidebarRef}
-      className={`flex flex-col h-screen bg-background border-r transition-all duration-300 ${
-        isExpanded ? "w-64" : "w-16"
-      }`}
+      className={`flex flex-col h-screen bg-background border-r transition-all duration-300 ${isExpanded ? "w-64" : "w-16"
+        }`}
     >
       <div className="p-2 ml-2 mt-2 flex items-center justify-between w-full">
         <Link to="/" className="flex items-center space-x-2">
@@ -185,6 +211,90 @@ const Sidebar = () => {
         )}
       </div>
 
+      {savedConnections.length > 0 && (
+        <div className="p-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              {isExpanded ? (
+                <Button
+                  variant="outline"
+                  className="w-full justify-between px-2"
+                >
+                  <span className="flex items-center min-w-0">
+                    <span
+                      className={`h-2.5 w-2.5 rounded-full shrink-0 ${activeConnection
+                          ? ENV_DOT_CLASS[activeConnection.environment]
+                          : "bg-muted-foreground"
+                        }`}
+                    />
+                    <span className="ml-2 truncate text-sm">
+                      {activeConnection?.name ?? "Connections"}
+                    </span>
+                  </span>
+                  {activeConnection && (
+                    <span
+                      className={`ml-2 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold ${ENV_BADGE_CLASS[activeConnection.environment]
+                        }`}
+                    >
+                      {ENV_LABEL[activeConnection.environment]}
+                    </span>
+                  )}
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="w-full relative"
+                >
+                  <Database className="h-5 w-5" />
+                  <span
+                    className={`absolute top-0.5 right-0.5 h-2.5 w-2.5 rounded-full ${activeConnection
+                        ? ENV_DOT_CLASS[activeConnection.environment]
+                        : "bg-muted-foreground"
+                      }`}
+                  />
+                </Button>
+              )}
+            </DropdownMenuTrigger>
+            <DropdownMenuContent side="right" align="start" className="w-72">
+              <DropdownMenuLabel>Connections</DropdownMenuLabel>
+              {savedConnections.map((conn) => (
+                <DropdownMenuItem
+                  key={conn.id}
+                  onSelect={() => handleSwitchConnection(conn.id)}
+                  className="gap-2"
+                >
+                  <span
+                    className={`h-2.5 w-2.5 rounded-full shrink-0 ${ENV_DOT_CLASS[conn.environment]
+                      }`}
+                  />
+                  <span className="flex flex-col min-w-0 flex-grow">
+                    <span className="truncate text-sm">{conn.name}</span>
+                    <span className="truncate text-xs text-muted-foreground font-mono">
+                      {conn.credential.url}
+                    </span>
+                  </span>
+                  <span
+                    className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold ${ENV_BADGE_CLASS[conn.environment]
+                      }`}
+                  >
+                    {ENV_LABEL[conn.environment]}
+                  </span>
+                  {conn.id === activeConnectionId && (
+                    <Check className="h-4 w-4 shrink-0" />
+                  )}
+                </DropdownMenuItem>
+              ))}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => navigate("/settings")}>
+                <CogIcon className="h-4 w-4 mr-2" />
+                Manage connections…
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      )}
+
       <ScrollArea className="flex-grow">
         <nav className="space-y-1 p-2">
           {navItems.map((item) => (
@@ -192,11 +302,10 @@ const Sidebar = () => {
               key={item.to}
               to={item.to}
               target={item.isNewWindow ? "_blank" : "_self"}
-              className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                location.pathname === item.to
+              className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${location.pathname === item.to
                   ? "bg-secondary text-secondary-foreground"
                   : "hover:bg-secondary/80"
-              }`}
+                }`}
             >
               <item.icon className={`h-5 w-5 ${isExpanded ? "mr-2" : ""}`} />
               {isExpanded && <span>{item.label}</span>}
@@ -205,11 +314,10 @@ const Sidebar = () => {
           {isAdmin && (
             <Link
               to="/admin"
-              className={`relative flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                location.pathname === "/admin"
+              className={`relative flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${location.pathname === "/admin"
                   ? "bg-secondary text-secondary-foreground"
                   : "hover:bg-secondary/80"
-              }`}
+                }`}
             >
               <div className="relative">
                 <ShieldCheck
@@ -238,14 +346,13 @@ const Sidebar = () => {
                 key={item.to}
                 to={item.to}
                 target={item.isNewWindow ? "_blank" : "_self"}
-                className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                  location.pathname === item.to
+                className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${location.pathname === item.to
                     ? "bg-secondary text-secondary-foreground"
                     : "hover:bg-secondary/80"
-                }`}
+                  }`}
               >
-                <item.icon className={`h-5 w-5 text-${item.iconColor} ${isExpanded ? "mr-2" : ""}`} />
-                {isExpanded && <span className={`text-${item.iconColor}`}>{item.label}</span>}
+                <item.icon className={`h-5 w-5 ${isExpanded ? "mr-2" : ""}`} />
+                {isExpanded && <span>{item.label}</span>}
               </Link>
             ))}
           </nav>
@@ -323,11 +430,10 @@ const Sidebar = () => {
         <Popover>
           <PopoverTrigger asChild>
             <Button
-              className={`${
-                isExpanded
+              className={`${isExpanded
                   ? "w-full justify-items-stretch mb-2"
                   : "m-auto w-full"
-              } hover:bg-transparent bg-transparent text-primary`}
+                } hover:bg-transparent bg-transparent text-primary`}
             >
               {isLoadingCredentials ? (
                 <Loader2 className="h-5 w-5 animate-spin" />
@@ -341,8 +447,8 @@ const Sidebar = () => {
                   {isLoadingCredentials
                     ? "Connecting..."
                     : isServerAvailable
-                    ? "Connected"
-                    : "Disconnected"}
+                      ? "Connected"
+                      : "Disconnected"}
                 </span>
               )}
             </Button>
@@ -354,11 +460,17 @@ const Sidebar = () => {
                 {isLoadingCredentials
                   ? "Connecting..."
                   : isServerAvailable
-                  ? "Connected"
-                  : "Disconnected"}
+                    ? "Connected"
+                    : "Disconnected"}
               </p>
+              {activeConnection && (
+                <p className="text-xs">
+                  Connection: {activeConnection.name} (
+                  {ENV_LABEL[activeConnection.environment]})
+                </p>
+              )}
               <p className="text-xs">Click House Version: {version}</p>
-              <p className="text-xs">CH-UI Version: {ch_ui_version}</p>
+              <p className="text-xs">CH-UI MH Version: {ch_ui_version}</p>
             </div>
           </PopoverContent>
         </Popover>
@@ -417,6 +529,31 @@ const Sidebar = () => {
               </CommandItem>
             ))}
           </CommandGroup>
+          {savedConnections.length > 0 && (
+            <CommandGroup heading="Connections">
+              {savedConnections.map((conn) => (
+                <CommandItem
+                  key={conn.id}
+                  onSelect={() => {
+                    handleSwitchConnection(conn.id);
+                    setOpen(false);
+                  }}
+                >
+                  <span
+                    className={`mr-2 h-2.5 w-2.5 rounded-full shrink-0 ${ENV_DOT_CLASS[conn.environment]
+                      }`}
+                  />
+                  {conn.name}
+                  <span
+                    className={`ml-2 rounded px-1.5 py-0.5 text-[10px] font-bold ${ENV_BADGE_CLASS[conn.environment]
+                      }`}
+                  >
+                    {ENV_LABEL[conn.environment]}
+                  </span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          )}
           <CommandGroup heading="Actions">
             <CommandItem
               onSelect={() => {

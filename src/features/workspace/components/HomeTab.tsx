@@ -35,7 +35,7 @@ const resourceCards = [
   {
     title: "Star us on GitHub!",
     description: "Support our project by starring it on GitHub.",
-    link: "https://github.com/caioricciuti/ch-ui",
+    link: "https://github.com/kolsys/ch-ui-v1-multihost",
     Icon: Github,
     action: "Star on GitHub",
   },
@@ -50,7 +50,7 @@ const resourceCards = [
     title: "CH-UI Documentation",
     Icon: ExternalLink,
     description: "Learn how to make the most of CH-UI.",
-    link: "https://ch-ui.com",
+    link: "https://github.com/kolsys/ch-ui-v1-multihost#readme",
     action: "Explore CH-UI",
   },
 ];
@@ -154,37 +154,6 @@ const HomeTab = () => {
           </Button>
         ))}
       </motion.div>
-
-      <Card className="p-6 bg-gradient-to-r from-orange-500 via-orange-400 to-red-600 rounded-lg text-white border-none">
-        <div className="flex items-center justify-between gap-6">
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-2">
-              <CardTitle className="text-xl">
-                CH-UI - V2
-              </CardTitle>
-            </div>
-            <p className="text-white text-sm font-bold">
-              We are excited to announce the launch of CH-UI V2, our new version of CH-UI!
-              Experience enhanced performance, seamless collaboration, and a host of new features designed to supercharge your ClickHouse workflow.
-              ONE BINARY - More secure, more resources!
-            </p>
-          </div>
-          <div className="flex flex-col gap-2 items-end">
-            <Button
-              variant="secondary"
-              className="shrink-0 bg-white text-orange-600 hover:bg-white/90"
-              onClick={() =>
-                window.open(
-                  "https://ch-ui.com?utm_source=ch-ui-oss&utm_medium=home-tab",
-                  "_blank"
-                )
-              }
-            >
-              Get Started with CH-UI V2
-            </Button>
-          </div>
-        </div>
-      </Card>
 
       <Tabs defaultValue="recent" className="space-y-4">
         <TabsList className="w-full justify-start">

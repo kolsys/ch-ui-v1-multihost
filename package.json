@@ -5,7 +5,7 @@
     "name": "Caio Ricciuti",
     "email": "caio.ricciuti@outlook.com"
   },
-  "version": "1.9.0-final_release",
+  "version": "1.0",
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {

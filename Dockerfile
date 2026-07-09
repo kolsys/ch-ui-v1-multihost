@@ -62,7 +62,7 @@ LABEL org.opencontainers.image.title="CH-UI" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${COMMIT_SHA}" \
       org.opencontainers.image.created="${BUILD_DATE}" \
-      org.opencontainers.image.source="https://github.com/caioricciuti/ch-ui"
+      org.opencontainers.image.source="https://github.com/kolsys/ch-ui-v1-multihost"
 
 # Environment variables with defaults
 ENV VITE_CLICKHOUSE_URL="" \
