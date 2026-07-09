@@ -85,4 +85,11 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:5521 || exit 1
 
 # Start the application
-CMD ["/bin/sh", "-c", "bun run /app/inject-env.cjs && ./node_modules/.bin/serve -s -l 5521 /app"]
+# -u/--no-compression: `serve` otherwise streams brotli via chunked transfer
+# encoding (no Content-Length, since the compressed size isn't known upfront).
+# Some corporate load balancers/WAFs buffer or inspect response bodies and
+# don't handle brotli well, causing truncated ("partial transfer") downloads
+# of large bundles through them. Serving raw files with a fixed Content-Length
+# is far more broadly compatible; let the reverse proxy/LB in front of this
+# container do its own (gzip) compression if needed.
+CMD ["/bin/sh", "-c", "bun run /app/inject-env.cjs && ./node_modules/.bin/serve -u -s -l 5521 /app"]
