@@ -16,8 +16,13 @@
 //                      (default: <out-dir>/clickhouse-http-default-response.xml)
 //   --skip-build       reuse an existing build in --out-dir instead of
 //                      re-running `vite build`
+//
+// The entry JS/CSS are additionally copied to a fixed "index-latest.*" name
+// and index.html is pointed at that name instead of its content hash, so the
+// generated ClickHouse config snippet never changes across rebuilds — only
+// re-uploading the static files is needed after that.
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -59,11 +64,15 @@ const indexHtmlPath = path.join(outDir, "index.html");
 
 if (!args["skip-build"]) {
   console.log(`Building CH-UI with base URL: ${baseUrl}`);
-  execFileSync(path.join(rootDir, "node_modules", ".bin", "vite"), ["build"], {
-    cwd: rootDir,
-    stdio: "inherit",
-    env: { ...process.env, VITE_BASE_PATH: baseUrl },
-  });
+  execFileSync(
+    path.join(rootDir, "node_modules", ".bin", "vite"),
+    ["build", "--outDir", outDir],
+    {
+      cwd: rootDir,
+      stdio: "inherit",
+      env: { ...process.env, VITE_BASE_PATH: baseUrl },
+    }
+  );
 }
 
 if (!existsSync(indexHtmlPath)) {
@@ -71,7 +80,35 @@ if (!existsSync(indexHtmlPath)) {
   process.exit(1);
 }
 
-const indexHtml = readFileSync(indexHtmlPath, "utf8");
+let indexHtml = readFileSync(indexHtmlPath, "utf8");
+
+// Pin the entry JS/CSS to a fixed name instead of their content hash, and
+// point index.html at that name. Renames (doesn't copy) the hashed file —
+// nothing else references the entry by its hash, unlike dynamically-imported
+// chunks, which are referenced by hash from inside the entry bundle itself,
+// not from index.html, and are left untouched.
+function pinEntryAsset(html, extension) {
+  const attr = extension === "js" ? "src" : "href";
+  const pattern = new RegExp(`${attr}="([^"]*assets/index-[^"]+\\.${extension})"`);
+  const match = html.match(pattern);
+  if (!match) return html;
+
+  const url = match[1];
+  const fileName = url.slice(url.lastIndexOf("/") + 1);
+  const stableFileName = `index-latest.${extension}`;
+  if (fileName !== stableFileName) {
+    renameSync(
+      path.join(outDir, "assets", fileName),
+      path.join(outDir, "assets", stableFileName)
+    );
+  }
+  const stableUrl = url.slice(0, url.lastIndexOf("/") + 1) + stableFileName;
+  return html.split(url).join(stableUrl);
+}
+
+indexHtml = pinEntryAsset(indexHtml, "js");
+indexHtml = pinEntryAsset(indexHtml, "css");
+writeFileSync(indexHtmlPath, indexHtml);
 
 // Escape "]]>" so it can't prematurely close the CDATA section.
 const cdataSafeHtml = indexHtml.split("]]>").join("]]]]><![CDATA[>");

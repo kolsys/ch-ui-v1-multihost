@@ -1,4 +1,5 @@
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { getAppBasePath } from "@/lib/basePath";
 import Sidebar from "@/components/common/Sidebar";
 import HomePage from "@/pages/Home";
 import MetricsPage from "@/pages/Metrics";
@@ -20,7 +21,7 @@ export default function App() {
 
   return (
     <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
-      <Router basename={import.meta.env.BASE_URL}>
+      <Router basename={getAppBasePath()}>
         <AppInitializer>
           <EnvironmentIndicator />
           <div className="flex h-screen">

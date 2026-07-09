@@ -6,6 +6,20 @@ import "uplot/dist/uPlot.min.css";
 import "./features/metrics/components/uplot.css";
 import { Toaster } from "@/components/ui/sonner";
 
+// Storage hosts that serve objects by exact key (no directory-index
+// resolution, e.g. plain S3/Yandex Object Storage buckets) require
+// requesting ".../index.html" literally. Strip that suffix before Router
+// mounts so location.pathname matches the router's basename (which is
+// derived from the same directory path, without "index.html").
+if (/\/index\.html$/i.test(window.location.pathname)) {
+  const cleanPath = window.location.pathname.replace(/\/index\.html$/i, "/");
+  window.history.replaceState(
+    null,
+    "",
+    cleanPath + window.location.search + window.location.hash
+  );
+}
+
 // Polyfill for crypto.randomUUID if not available
 if (typeof crypto.randomUUID !== "function") {
   crypto.randomUUID = function () {

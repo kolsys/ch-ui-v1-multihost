@@ -22,7 +22,7 @@ import SchemaSection from "./SchemaSection";
 import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { getBasePath } from "@/lib/basePath";
+import { getAppBasePath } from "@/lib/basePath";
 
 interface InfoTabProps {
   database: string;
@@ -272,7 +272,7 @@ const InfoTab: React.FC<InfoTabProps> = ({ database, tableName }) => {
             params.append("table", tableName);
           }
           params.append("tab", activeTab);
-          const url = `${window.location.origin}${getBasePath()}?${params.toString()}`;
+          const url = `${window.location.origin}${getAppBasePath()}?${params.toString()}`;
           navigator.clipboard.writeText(url);
           toast.success("URL copied to clipboard");
         }}
