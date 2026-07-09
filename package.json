@@ -11,6 +11,7 @@
   "scripts": {
     "dev": "vite --host",
     "build": "vite build",
+    "build:static": "node scripts/build-static.mjs",
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
     "test": "vitest",
     "preview": "vite preview"

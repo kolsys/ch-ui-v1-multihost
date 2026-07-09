@@ -194,6 +194,51 @@ npm run dev
 npm run preview
 ```
 
+### Option 3: Static Build for S3 (or any static host) + ClickHouse
+
+CH-UI is a pure client-side SPA — it can be built as static files, hosted on S3 (or GCS, Cloudflare R2, Yandex Object Storage, etc.), and served through ClickHouse itself via its `http_server_default_response` config option. This means visiting your ClickHouse HTTP interface root (e.g. `http://your-clickhouse-host:8123/`) returns the CH-UI shell, which then loads its JS/CSS from your static host — no separate app server needed.
+
+The `npm run build:static` script automates both steps:
+
+```bash
+npm install
+
+npm run build:static -- --base-url=https://your-bucket.example/ch-ui/
+# or
+S3_BASE_URL=https://your-bucket.example/ch-ui/ npm run build:static
+```
+
+This will:
+1. Run `vite build` with the given URL baked in as the base for every asset reference (JS, CSS, favicon).
+2. Write `dist/clickhouse-http-default-response.xml` — a ready-to-use ClickHouse config snippet wrapping the built `index.html` in a `<![CDATA[...]]>` block, and print the exact next steps in the console.
+
+Then:
+
+```bash
+# 1. Upload everything except index.html and the generated xml to your bucket
+aws s3 sync dist/ s3://your-bucket/ch-ui/ \
+  --exclude "index.html" --exclude "clickhouse-http-default-response.xml"
+
+# 2. Drop the generated snippet into ClickHouse's config.d/
+cp dist/clickhouse-http-default-response.xml /etc/clickhouse-server/config.d/ch-ui-static.xml
+
+# 3. Reload/restart ClickHouse
+sudo systemctl restart clickhouse-server
+```
+
+The generated `dist/clickhouse-http-default-response.xml` looks like this:
+
+```xml
+<clickhouse>
+    <http_server_default_response><![CDATA[<!doctype html>...<script src="https://your-bucket.example/ch-ui/assets/index-XXXXX.js"></script>...]]></http_server_default_response>
+</clickhouse>
+```
+
+Notes:
+- `--base-url`/`S3_BASE_URL` is required and must be an absolute `http(s)://` URL — there's no default bucket baked into the repo.
+- No ClickHouse connection credentials are baked into this build; connect via the in-app setup wizard after loading the page (same as any other deployment).
+- Options: `--out-dir` (default `dist`), `--config-out` (default `<out-dir>/clickhouse-http-default-response.xml`), `--skip-build` (regenerate the XML snippet from an already-built `dist/` without re-running Vite).
+
 ## 🧪 Development Environment
 
 ### Local ClickHouse Instance
@@ -338,17 +383,6 @@ No configuration needed - this works automatically.
 
 Documentation for the base functionality lives in the [`docs/`](./docs) directory of this repository. The original project's website is at [ch-ui.com](https://ch-ui.com) (it now covers CH-UI V2, a separate product unrelated to this fork).
 
-## 🔄 Migration Guide
-
-### Upgrading from v1.4.x to v1.5.30
-
-#### New Features
-1. **Reverse Proxy Support**: Set `VITE_BASE_PATH` if deploying behind a proxy
-2. **Distributed ClickHouse**: Enable in Settings for cluster operations
-3. **Enhanced Column Rendering**: No changes needed, automatic improvement
-
-#### Breaking Changes
-None - v1.5.30 is fully backward compatible.
 
 #### Recommended Actions
 1. Pull the latest Docker image
