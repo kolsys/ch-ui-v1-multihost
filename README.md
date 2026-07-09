@@ -11,6 +11,7 @@ A modern, feature-rich web interface for ClickHouse databases. CH-UI provides an
 - **🖧 Multi-Host Connections**: Save multiple ClickHouse connections and switch between them on the fly — no more re-entering credentials when you work with several hosts.
 - **🏷️ Environment Labels**: Tag each connection as `DEV`, `STAGING` or `PROD` and get a color-coded environment indicator in the UI, so you always know which host you are querying.
 - **⚙️ Custom Connection Parameters**: Pass arbitrary ClickHouse settings per connection as a `key=value` list (e.g. `enable_analyzer=0&max_execution_time=300`) — applied to every query on that connection.
+- **📦 Static Site Generator**: Build CH-UI as a set of static files (`npm run build:static`) ready for S3 or any static host — can be served straight from ClickHouse via `http_server_default_response`, no app server required. See [Static Build](#option-3-static-build-for-s3-or-any-static-host--clickhouse).
 
 ## 🌟 Key Features
 
