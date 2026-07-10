@@ -6,10 +6,14 @@ interface QueryVariable {
 }
 
 /**
- * Format date for ClickHouse queries
+ * Format date for ClickHouse queries as an explicit UTC-epoch toDateTime() call.
+ * A quoted naive datetime string (e.g. from toISOString()) is interpreted by
+ * ClickHouse in the session's timezone rather than UTC, silently shifting the
+ * value whenever the server timezone isn't UTC. toDateTime(epochSeconds) is
+ * unambiguous regardless of session timezone.
  */
 const formatClickHouseDate = (date: Date): string => {
-  return date.toISOString().slice(0, 19).replace('T', ' ');
+  return `toDateTime(${Math.floor(date.getTime() / 1000)})`;
 };
 
 /**
@@ -18,7 +22,7 @@ const formatClickHouseDate = (date: Date): string => {
 const formatTimeFromTo = (timeRange: TimeRange): string => {
   const fromStr = formatClickHouseDate(timeRange.from);
   const toStr = formatClickHouseDate(timeRange.to);
-  return `'${fromStr}' AND '${toStr}'`;
+  return `${fromStr} AND ${toStr}`;
 };
 
 /**
@@ -32,11 +36,11 @@ const getBuiltInVariables = (timeRange: TimeRange): QueryVariable[] => {
     },
     {
       name: '$__timeFrom',
-      value: `'${formatClickHouseDate(timeRange.from)}'`,
+      value: formatClickHouseDate(timeRange.from),
     },
     {
       name: '$__timeTo',
-      value: `'${formatClickHouseDate(timeRange.to)}'`,
+      value: formatClickHouseDate(timeRange.to),
     },
     {
       name: '$__timeFilter',

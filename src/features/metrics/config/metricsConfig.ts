@@ -479,9 +479,9 @@ export const metrics: Metrics[] = [
      FROM numbers(toUInt64((($__unixEpochTo - $__unixEpochFrom) / $__bucketSec) + 1))
    ) AS g
    LEFT JOIN (
-     SELECT $__timeBucket AS bucket, sum(value) AS bytes_received
-     FROM system.asynchronous_metric_log
-     WHERE event_time BETWEEN $__timeFromTo AND metric LIKE '%NetworkReceiveBytes%'
+     SELECT $__timeBucket AS bucket, sum(ProfileEvent_NetworkReceiveBytes) AS bytes_received
+     FROM system.metric_log
+     WHERE event_time BETWEEN $__timeFromTo
      GROUP BY $__timeBucket
    ) AS d USING bucket
    ORDER BY g.bucket
