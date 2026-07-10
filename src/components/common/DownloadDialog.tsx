@@ -8,7 +8,17 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
 import { Download, AlertCircle } from "lucide-react";
 import Papa from "papaparse";
 import { toast } from "sonner";
@@ -22,7 +32,82 @@ interface DownloadDialogProps {
   maxRows?: number;
 }
 
-type ExportFormat = "csv" | "json" | "clipboard";
+// Regenerated server-side via `onExport` (re-run with FORMAT <x>), unlike
+// csv/json/clipboard which format the already-fetched `data` prop locally.
+export const NATIVE_TEXT_FORMATS = [
+  "CSV",
+  "CSVWithNames",
+  "CSVWithNamesAndTypes",
+  "TabSeparated",
+  "TabSeparatedWithNames",
+  "JSON",
+  "JSONStrings",
+  "JSONColumns",
+  "JSONColumnsWithMetadata",
+  "JSONCompact",
+  "JSONEachRow",
+  "PrettyJSONEachRow",
+  "SQLInsert",
+  "Markdown",
+  "Values",
+  "Prometheus",
+] as const;
+
+export const NATIVE_BINARY_FORMATS = ["Native", "Avro", "Parquet", "BSONEachRow"] as const;
+
+export const NATIVE_FORMATS = [...NATIVE_TEXT_FORMATS, ...NATIVE_BINARY_FORMATS] as const;
+
+export type NativeExportFormat = (typeof NATIVE_FORMATS)[number];
+type ExportFormat = "csv" | "json" | "clipboard" | NativeExportFormat;
+
+const isNativeFormat = (format: ExportFormat): format is NativeExportFormat =>
+  (NATIVE_FORMATS as readonly string[]).includes(format);
+
+export const NATIVE_FORMAT_EXTENSIONS: Record<NativeExportFormat, string> = {
+  CSV: "csv",
+  CSVWithNames: "csv",
+  CSVWithNamesAndTypes: "csv",
+  TabSeparated: "tsv",
+  TabSeparatedWithNames: "tsv",
+  JSON: "json",
+  JSONStrings: "json",
+  JSONColumns: "json",
+  JSONColumnsWithMetadata: "json",
+  JSONCompact: "json",
+  JSONEachRow: "ndjson",
+  PrettyJSONEachRow: "json",
+  SQLInsert: "sql",
+  Markdown: "md",
+  Values: "txt",
+  Prometheus: "prom",
+  Native: "native",
+  Avro: "avro",
+  Parquet: "parquet",
+  BSONEachRow: "bson",
+};
+
+export const NATIVE_FORMAT_CONTENT_TYPES: Record<NativeExportFormat, string> = {
+  CSV: "text/csv",
+  CSVWithNames: "text/csv",
+  CSVWithNamesAndTypes: "text/csv",
+  TabSeparated: "text/tab-separated-values",
+  TabSeparatedWithNames: "text/tab-separated-values",
+  JSON: "application/json",
+  JSONStrings: "application/json",
+  JSONColumns: "application/json",
+  JSONColumnsWithMetadata: "application/json",
+  JSONCompact: "application/json",
+  JSONEachRow: "application/x-ndjson",
+  PrettyJSONEachRow: "text/plain",
+  SQLInsert: "text/plain",
+  Markdown: "text/markdown",
+  Values: "text/plain",
+  Prometheus: "text/plain",
+  Native: "application/octet-stream",
+  Avro: "application/octet-stream",
+  Parquet: "application/octet-stream",
+  BSONEachRow: "application/octet-stream",
+};
 
 const CHUNK_SIZE = 10000; // Number of rows to process at once
 
@@ -67,6 +152,11 @@ const DownloadDialog: React.FC<DownloadDialogProps> = ({
   const [open, setOpen] = useState(false);
 
   const estimateSize = useCallback(async () => {
+    if (isNativeFormat(downloadOption)) {
+      setEstimatedSize("");
+      return;
+    }
+
     if (data.length === 0) {
       setEstimatedSize("0 B");
       return;
@@ -238,14 +328,20 @@ const DownloadDialog: React.FC<DownloadDialogProps> = ({
       setIsProcessing(true);
       setProgress(0);
 
-      if (data.length > maxRows) {
+      const usingNativeFormat = isNativeFormat(downloadOption);
+
+      if (!usingNativeFormat && data.length > maxRows) {
         toast.error(`Cannot export more than ${maxRows.toLocaleString()} rows`);
         return;
       }
 
       let blob: Blob;
 
-      if (onExport) {
+      if (usingNativeFormat) {
+        if (!onExport) {
+          toast.error("Native format export isn't available here.");
+          return;
+        }
         blob = await onExport(downloadOption);
       } else {
         blob = await processInChunks(data, downloadOption, CHUNK_SIZE);
@@ -259,10 +355,13 @@ const DownloadDialog: React.FC<DownloadDialogProps> = ({
         await navigator.clipboard.writeText(text);
         toast.success("Copied to clipboard!", { duration: 2000 });
       } else {
+        const extension = isNativeFormat(downloadOption)
+          ? NATIVE_FORMAT_EXTENSIONS[downloadOption]
+          : downloadOption;
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `${exportFilename}.${downloadOption}`;
+        a.download = `${exportFilename}.${extension}`;
         document.body.appendChild(a);
         a.click();
         URL.revokeObjectURL(url);
@@ -301,27 +400,71 @@ const DownloadDialog: React.FC<DownloadDialogProps> = ({
             </Alert>
           )}
 
-          <RadioGroup
-            value={downloadOption}
-            onValueChange={(value) => setDownloadOption(value as ExportFormat)}
-          >
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="csv" id="csv" />
-              <Label htmlFor="csv">CSV</Label>
-            </div>
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="json" id="json" />
-              <Label htmlFor="json">JSON</Label>
-            </div>
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="clipboard" id="clipboard" />
-              <Label htmlFor="clipboard">Copy to Clipboard</Label>
-            </div>
-          </RadioGroup>
+          <div className="space-y-2">
+            <Label className="text-xs text-muted-foreground">Quick Export</Label>
+            <RadioGroup
+              value={downloadOption}
+              onValueChange={(value) => setDownloadOption(value as ExportFormat)}
+            >
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="csv" id="csv" />
+                <Label htmlFor="csv">CSV</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="json" id="json" />
+                <Label htmlFor="json">JSON</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="clipboard" id="clipboard" />
+                <Label htmlFor="clipboard">Copy to Clipboard</Label>
+              </div>
+            </RadioGroup>
+          </div>
+
+          {onExport && (
+            <>
+              <Separator />
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">
+                  Native ClickHouse Format
+                </Label>
+                <Select
+                  value={isNativeFormat(downloadOption) ? downloadOption : ""}
+                  onValueChange={(value) => setDownloadOption(value as ExportFormat)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a native format…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {NATIVE_TEXT_FORMATS.map((format) => (
+                        <SelectItem key={format} value={format}>
+                          {format}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                    <SelectGroup>
+                      <SelectLabel>Binary</SelectLabel>
+                      {NATIVE_BINARY_FORMATS.map((format) => (
+                        <SelectItem key={format} value={format}>
+                          {format}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Re-runs the query on the server with this FORMAT and streams the result.
+                </p>
+              </div>
+            </>
+          )}
 
           <div className="text-sm text-gray-500">
-            Estimated size: {estimatedSize}
-            {data.length > maxRows && (
+            {isNativeFormat(downloadOption)
+              ? "Size depends on the server-side result — not estimated locally."
+              : `Estimated size: ${estimatedSize}`}
+            {!isNativeFormat(downloadOption) && data.length > maxRows && (
               <div className="flex items-center mt-2 text-amber-500">
                 <AlertCircle className="h-4 w-4 mr-2" />
                 Warning: Large dataset ({data.length.toLocaleString()} rows)

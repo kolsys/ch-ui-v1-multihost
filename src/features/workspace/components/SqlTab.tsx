@@ -15,7 +15,10 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { useTheme } from "@/components/common/theme-provider";
-import DownloadDialog from "@/components/common/DownloadDialog";
+import DownloadDialog, {
+  NATIVE_FORMAT_CONTENT_TYPES,
+  NativeExportFormat,
+} from "@/components/common/DownloadDialog";
 import EmptyQueryResult from "./EmptyQueryResult";
 import StatisticsDisplay from "./StatisticsDisplay";
 
@@ -55,7 +58,7 @@ const CustomCellRenderer = (props: ICellRendererParams) => {
  * query results, metadata, and statistics tabs on the bottom.
  */
 const SqlTab: React.FC<SqlTabProps> = ({ tabId }) => {
-  const { getTabById, runQuery, fetchDatabaseInfo } = useAppStore();
+  const { getTabById, runQuery, fetchDatabaseInfo, runQueryWithFormat } = useAppStore();
   const tab = getTabById(tabId);
   const { theme } = useTheme();
   const [activeTab, setActiveTab] = useState<string>("results");
@@ -85,6 +88,21 @@ const SqlTab: React.FC<SqlTabProps> = ({ tabId }) => {
       query
     );
   };
+
+  const handleNativeExport = useCallback(
+    async (format: string): Promise<Blob> => {
+      const query = typeof tab?.content === "string" ? tab.content : "";
+      if (!query.trim()) {
+        throw new Error("No query to export");
+      }
+      const buffer = await runQueryWithFormat(query, format);
+      const contentType =
+        NATIVE_FORMAT_CONTENT_TYPES[format as NativeExportFormat] ||
+        "application/octet-stream";
+      return new Blob([buffer], { type: contentType });
+    },
+    [tab?.content, runQueryWithFormat]
+  );
 
   // Handle query execution
   const handleRunQuery = useCallback(
@@ -222,7 +240,7 @@ const SqlTab: React.FC<SqlTabProps> = ({ tabId }) => {
             {hasData && (
               <div className="ml-2 text-muted-foreground items-center flex">
                 ({tab?.result.data.length} rows)
-                <DownloadDialog data={tab?.result.data} />
+                <DownloadDialog data={tab?.result.data} onExport={handleNativeExport} />
               </div>
             )}
           </TabsTrigger>

@@ -1,6 +1,7 @@
 // src/store/store.ts
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { persist, createJSONStorage } from "zustand/middleware";
+import { compressedLocalStorage } from "@/lib/compressedStorage";
 import {
   AppState,
   Credential,
@@ -192,6 +193,7 @@ const useAppStore = create<AppState>()(
         error: "",
         credentialSource: null,
         updatedSavedQueriesTrigger: "",
+        currentDatabase: null,
         clickhouseSettings: {
           max_result_rows: "0",
           max_result_bytes: "0",
@@ -226,7 +228,7 @@ const useAppStore = create<AppState>()(
                 ) as ClickHouseSettings),
               },
             });
-            set({ clickHouseClient: client });
+            set({ clickHouseClient: client, currentDatabase: credential.database || null });
             await get()
               .checkServerStatus()
               .then(() => {
@@ -249,6 +251,41 @@ const useAppStore = create<AppState>()(
             });
           } finally {
             set({ isLoadingCredentials: false });
+          }
+        },
+
+        /**
+         * Switches the default database used to resolve unqualified table
+         * names, by recreating the client with a new `database` config
+         * (ClickHouse has no per-query database override).
+         */
+        setCurrentDatabase: async (database: string) => {
+          const { credential } = get();
+          try {
+            const connectionUrl = buildConnectionUrl(credential);
+            const client = createClient({
+              url: connectionUrl,
+              pathname: credential.customPath,
+              username: credential.username,
+              password: credential.password || "",
+              request_timeout: credential.requestTimeout || 30000,
+              database,
+              clickhouse_settings: {
+                ...get().clickhouseSettings,
+                result_overflow_mode: "break",
+                ...(parseCustomParams(
+                  credential.customParams
+                ) as ClickHouseSettings),
+              },
+            });
+            set({ clickHouseClient: client, currentDatabase: database });
+            toast.success(`Current database set to "${database}"`);
+          } catch (error) {
+            const enhancedError = ClickHouseError.fromError(
+              error,
+              `Failed to switch to database ${database}`
+            );
+            toast.error(`Database switch error: ${enhancedError.message}`);
           }
         },
 
@@ -503,6 +540,32 @@ const useAppStore = create<AppState>()(
               }));
             }
           }
+        },
+
+        /**
+         * Re-runs a query asking ClickHouse to render the output in one of its
+         * native serialization formats (e.g. TabSeparated, SQLInsert, Parquet).
+         * These aren't in the client's typed JSON/CSV format union, so `exec`
+         * is used with the FORMAT clause embedded directly in the SQL text.
+         * Returns raw bytes (via arrayBuffer) rather than decoded text, since
+         * some of these formats (Avro, Parquet, Native, BSONEachRow) are binary
+         * and would be corrupted by a UTF-8 text round-trip.
+         */
+        runQueryWithFormat: async (query: string, format: string) => {
+          const { clickHouseClient } = get();
+          if (!clickHouseClient) {
+            throw new Error("ClickHouse client is not initialized");
+          }
+          const cleanedQuery = query
+            .trim()
+            .replace(/;\s*$/, "")
+            .replace(/\s+FORMAT\s+\w+\s*$/i, "");
+
+          const result = await clickHouseClient.exec({
+            query: `${cleanedQuery} FORMAT ${format}`,
+          });
+          const response = new Response(result.stream as any);
+          return await response.arrayBuffer();
         },
 
         /**
@@ -1118,6 +1181,9 @@ const useAppStore = create<AppState>()(
 
     {
       name: "app-storage",
+      // Compresses persisted values (localStorage quota is finite, and saved
+      // tabs/queries can get large); still reads old, uncompressed entries.
+      storage: createJSONStorage(() => compressedLocalStorage),
       // Persist subset of the state to localStorage
       partialize: (state) => ({
         credential: state.credential,
@@ -1133,6 +1199,7 @@ const useAppStore = create<AppState>()(
         })),
         clickhouseSettings: state.clickhouseSettings,
         isAdmin: state.isAdmin,
+        currentDatabase: state.currentDatabase,
       }),
     }
   )

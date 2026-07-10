@@ -79,7 +79,6 @@ import { withBasePath } from "@/lib/basePath";
 import useAppStore from "@/store";
 
 const Logo = withBasePath("logo.png");
-import { Badge } from "@/components/ui/badge";
 
 const commandsSheet = [
   {
@@ -319,19 +318,7 @@ const Sidebar = () => {
                   : "hover:bg-secondary/80"
                 }`}
             >
-              <div className="relative">
-                <ShieldCheck
-                  className={`h-5 w-5 ${isExpanded ? "mr-2" : ""}`}
-                />
-                <Badge
-                  variant="secondary"
-                  className={`absolute -top-1 -right-0 bg-purple-500 text-[10px] text-white hover:bg-purple-600 p-1
-                    ${isExpanded ? "mr-2" : ""}
-                    `}
-                >
-                  {" "}
-                </Badge>
-              </div>
+              <ShieldCheck className={`h-5 w-5 ${isExpanded ? "mr-2" : ""}`} />
               {isExpanded && <span>ClickHouse Admin</span>}
             </Link>
           )}

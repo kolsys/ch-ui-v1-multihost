@@ -12,6 +12,10 @@ A modern, feature-rich web interface for ClickHouse databases. CH-UI provides an
 - **🏷️ Environment Labels**: Tag each connection as `DEV`, `STAGING` or `PROD` and get a color-coded environment indicator in the UI, so you always know which host you are querying.
 - **⚙️ Custom Connection Parameters**: Pass arbitrary ClickHouse settings per connection as a `key=value` list (e.g. `enable_analyzer=0&max_execution_time=300`) — applied to every query on that connection.
 - **📦 Static Site Generator**: Build CH-UI as a set of static files (`npm run build:static`) ready for S3 or any static host — can be served straight from ClickHouse via `http_server_default_response`, no app server required. See [Static Build](#option-3-static-build-for-s3-or-any-static-host--clickhouse).
+- **🗄️ Current Database Selection**: Double-click a database in the Explorer to make it the default for unqualified table names (`FROM my_table` instead of `FROM db.my_table`) — reflected in the editor and followed by autocomplete.
+- **📤 Native ClickHouse Export Formats**: Export query results in any of ClickHouse's native output formats — CSV, TabSeparated, the JSON family, SQLInsert, Markdown, Avro, Parquet, and more — streamed directly from the server.
+- **📜 Universal Logs Page**: Browse any `system.*_log` table available on the connected server (not just a fixed one), with curated views for the common ones and a generic viewer for the rest.
+- **⚡ Responsive SQL Editor**: Debounced persistence keeps typing smooth even with large queries, with case-insensitive syntax highlighting.
 
 ## 🌟 Key Features
 

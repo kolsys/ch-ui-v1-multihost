@@ -68,6 +68,8 @@ const TreeNode: React.FC<TreeNodeProps> = ({
     setActiveTab,
     openCreateTableModal,
     openCreateDatabaseModal,
+    currentDatabase,
+    setCurrentDatabase,
   } = useAppStore();
 
   const toggleOpen = useCallback((e: React.MouseEvent) => {
@@ -360,7 +362,29 @@ const TreeNode: React.FC<TreeNodeProps> = ({
           <div
             className={`flex items-center py-1 px-2 hover:bg-secondary hover:rounded-md cursor-pointer truncate
             ${level > 0 ? "ml-4" : ""}`}
-            onClick={toggleOpen}
+            onClick={(e) => {
+              if (
+                node.type === "table" ||
+                node.type === "view" ||
+                node.type === "dictionary" ||
+                node.type === "materialized_view"
+              ) {
+                e.stopPropagation();
+                if (parentDatabaseName) {
+                  openInfoTab(parentDatabaseName, node.name);
+                } else {
+                  toast.error("Parent database name is undefined.");
+                }
+              } else {
+                toggleOpen(e);
+              }
+            }}
+            onDoubleClick={(e) => {
+              if (node.type === "database") {
+                e.stopPropagation();
+                setCurrentDatabase(node.name);
+              }
+            }}
           >
             <div className="flex-grow flex items-center">
               {node.children ? (
@@ -374,20 +398,20 @@ const TreeNode: React.FC<TreeNodeProps> = ({
               )}
               {getIcon}
               <div
-                onClick={() => {
-                  if (node.type === "table" || node.type === "view" || node.type === "dictionary" || node.type === "materialized_view") {
-                    // Using non-null assertion since parentDatabaseName should be defined for table/view
-                    if (parentDatabaseName) {
-                      openInfoTab(parentDatabaseName, node.name);
-                    } else {
-                      toast.error("Parent database name is undefined.");
-                    }
-                  }
-                }}
-                className="text-xs"
+                className={`text-xs ${
+                  node.type === "database" && node.name === currentDatabase
+                    ? "font-semibold"
+                    : ""
+                }`}
               >
                 <p className="truncate"> {node.name}</p>
               </div>
+              {node.type === "database" && node.name === currentDatabase && (
+                <span
+                  className="ml-1.5 h-1.5 w-1.5 rounded-full bg-primary shrink-0"
+                  title="Current database"
+                />
+              )}
             </div>
             <div className="flex items-center">
               <DropdownMenu>

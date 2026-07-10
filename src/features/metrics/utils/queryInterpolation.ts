@@ -51,16 +51,16 @@ const getBuiltInVariables = (timeRange: TimeRange): QueryVariable[] => {
       value: getTimeGroupingFunction(timeRange),
     },
     {
+      name: '$__timeGroupExpr',
+      value: `${getTimeGroupingFunction(timeRange)}(event_time)`,
+    },
+    {
       name: '$__seconds',
       value: Math.max(1, Math.floor((timeRange.to.getTime() - timeRange.from.getTime()) / 1000)),
     },
     {
       name: '$__bucketSec',
       value: getBucketStepSeconds(timeRange),
-    },
-    {
-      name: '$__timeBucket',
-      value: getAdaptiveTimeGroupExpr(timeRange),
     },
     {
       name: '$__timeBucket',
@@ -147,6 +147,9 @@ export const interpolateQuery = (
   // Get all variables (built-in + custom)
   const builtInVariables = getBuiltInVariables(timeRange);
   const allVariables = [...builtInVariables, ...customVariables];
+
+  // Longer names first, so e.g. $__timeGroupExpr can't be prefix-matched by $__timeGroup.
+  allVariables.sort((a, b) => b.name.length - a.name.length);
 
   // Replace each variable in the query
   allVariables.forEach(variable => {

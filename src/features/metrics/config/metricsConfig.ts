@@ -129,11 +129,10 @@ export const metrics: Metrics[] = [
         type: "chart",
         chartType: "line",
         query: `
-          WITH toUInt64((($__unixEpochTo - $__unixEpochFrom) / $__bucketSec) + 1) AS steps
           SELECT g.bucket, COALESCE(d.query_count, 0) AS query_count
           FROM (
             SELECT toStartOfInterval(toDateTime($__unixEpochFrom + number * $__bucketSec), INTERVAL $__bucketSec SECOND) AS bucket
-            FROM numbers(steps)
+            FROM numbers(toUInt64((($__unixEpochTo - $__unixEpochFrom) / $__bucketSec) + 1))
           ) AS g
           LEFT JOIN (
             SELECT $__timeBucket AS bucket, COUNT(*) AS query_count
@@ -349,11 +348,10 @@ export const metrics: Metrics[] = [
       {
         title: "Queries Per Minute",
         query: `
-          WITH toUInt64((($__unixEpochTo - $__unixEpochFrom) / $__bucketSec) + 1) AS steps
           SELECT g.bucket, COALESCE(d.qps, 0) AS qps
           FROM (
             SELECT toStartOfInterval(toDateTime($__unixEpochFrom + number * $__bucketSec), INTERVAL $__bucketSec SECOND) AS bucket
-            FROM numbers(steps)
+            FROM numbers(toUInt64((($__unixEpochTo - $__unixEpochFrom) / $__bucketSec) + 1))
           ) AS g
           LEFT JOIN (
             SELECT $__timeBucket AS bucket, COUNT(*) AS qps
@@ -430,14 +428,13 @@ export const metrics: Metrics[] = [
       {
         title: "Memory Usage",
         query: `
-          WITH toUInt64((($__unixEpochTo - $__unixEpochFrom) / $__bucketSec) + 1) AS steps
           SELECT g.bucket, COALESCE(d.memory_usage, 0) AS memory_usage
           FROM (
             SELECT toStartOfInterval(toDateTime($__unixEpochFrom + number * $__bucketSec), INTERVAL $__bucketSec SECOND) AS bucket
-            FROM numbers(steps)
+            FROM numbers(toUInt64((($__unixEpochTo - $__unixEpochFrom) / $__bucketSec) + 1))
           ) AS g
           LEFT JOIN (
-            SELECT $__timeBucket AS bucket, avg(ProfileEvent_MemoryWorkerRun) AS memory_usage
+            SELECT $__timeBucket AS bucket, avg(CurrentMetric_MemoryTracking) AS memory_usage
             FROM system.metric_log
             WHERE event_time BETWEEN $__timeFromTo
             GROUP BY $__timeBucket
@@ -454,11 +451,10 @@ export const metrics: Metrics[] = [
       {
         title: "Threads Usage",
         query: `
-        WITH toUInt64((($__unixEpochTo - $__unixEpochFrom) / $__bucketSec) + 1) AS steps
         SELECT g.bucket, COALESCE(d.threads_running, 0) AS threads_running
         FROM (
           SELECT toStartOfInterval(toDateTime($__unixEpochFrom + number * $__bucketSec), INTERVAL $__bucketSec SECOND) AS bucket
-          FROM numbers(steps)
+          FROM numbers(toUInt64((($__unixEpochTo - $__unixEpochFrom) / $__bucketSec) + 1))
         ) AS g
         LEFT JOIN (
           SELECT $__timeBucket AS bucket, avg(ProfileEvent_Query) AS threads_running
@@ -477,11 +473,10 @@ export const metrics: Metrics[] = [
       {
         title: "Network Traffic",
         query: `
-   WITH toUInt64((($__unixEpochTo - $__unixEpochFrom) / $__bucketSec) + 1) AS steps
    SELECT g.bucket, COALESCE(d.bytes_received, 0) AS bytes_received
    FROM (
      SELECT toStartOfInterval(toDateTime($__unixEpochFrom + number * $__bucketSec), INTERVAL $__bucketSec SECOND) AS bucket
-     FROM numbers(steps)
+     FROM numbers(toUInt64((($__unixEpochTo - $__unixEpochFrom) / $__bucketSec) + 1))
    ) AS g
    LEFT JOIN (
      SELECT $__timeBucket AS bucket, sum(value) AS bytes_received
@@ -504,11 +499,10 @@ export const metrics: Metrics[] = [
       {
         title: "Disk Usage",
         query: `
-          WITH toUInt64((($__unixEpochTo - $__unixEpochFrom) / $__bucketSec) + 1) AS steps
           SELECT g.bucket, COALESCE(d.disk_usage, 0) AS disk_usage
           FROM (
             SELECT toStartOfInterval(toDateTime($__unixEpochFrom + number * $__bucketSec), INTERVAL $__bucketSec SECOND) AS bucket
-            FROM numbers(steps)
+            FROM numbers(toUInt64((($__unixEpochTo - $__unixEpochFrom) / $__bucketSec) + 1))
           ) AS g
           LEFT JOIN (
             SELECT $__timeBucket AS bucket, avg(ProfileEvent_ReadCompressedBytes) AS disk_usage
@@ -527,11 +521,10 @@ export const metrics: Metrics[] = [
       {
         title: "Keep Alive Connections",
         query: `
-          WITH toUInt64((($__unixEpochTo - $__unixEpochFrom) / $__bucketSec) + 1) AS steps
           SELECT g.bucket, COALESCE(d.active_connections, 0) AS active_connections
           FROM (
             SELECT toStartOfInterval(toDateTime($__unixEpochFrom + number * $__bucketSec), INTERVAL $__bucketSec SECOND) AS bucket
-            FROM numbers(steps)
+            FROM numbers(toUInt64((($__unixEpochTo - $__unixEpochFrom) / $__bucketSec) + 1))
           ) AS g
           LEFT JOIN (
             SELECT $__timeBucket AS bucket, avg(CurrentMetric_KeeperAliveConnections) AS active_connections
@@ -594,11 +587,10 @@ export const metrics: Metrics[] = [
     items: [
       {
         title: "Network Traffic",
-        query: `WITH toUInt64((($__unixEpochTo - $__unixEpochFrom) / $__bucketSec) + 1) AS steps
-                SELECT g.bucket, COALESCE(d.send_bytes, 0) AS send_bytes, COALESCE(d.receive_bytes, 0) AS receive_bytes
+                query: `SELECT g.bucket, COALESCE(d.send_bytes, 0) AS send_bytes, COALESCE(d.receive_bytes, 0) AS receive_bytes
                 FROM (
                   SELECT toStartOfInterval(toDateTime($__unixEpochFrom + number * $__bucketSec), INTERVAL $__bucketSec SECOND) AS bucket
-                  FROM numbers(steps)
+                  FROM numbers(toUInt64((($__unixEpochTo - $__unixEpochFrom) / $__bucketSec) + 1))
                 ) AS g
                 LEFT JOIN (
                   SELECT $__timeBucket AS bucket,
@@ -622,11 +614,10 @@ export const metrics: Metrics[] = [
       },
       {
         title: "Network Connections HTTP",
-        query: `WITH toUInt64((($__unixEpochTo - $__unixEpochFrom) / $__bucketSec) + 1) AS steps
-                SELECT g.bucket, COALESCE(d.connections, 0) AS connections
+                query: `SELECT g.bucket, COALESCE(d.connections, 0) AS connections
                 FROM (
                   SELECT toStartOfInterval(toDateTime($__unixEpochFrom + number * $__bucketSec), INTERVAL $__bucketSec SECOND) AS bucket
-                  FROM numbers(steps)
+                  FROM numbers(toUInt64((($__unixEpochTo - $__unixEpochFrom) / $__bucketSec) + 1))
                 ) AS g
                 LEFT JOIN (
                   SELECT $__timeBucket AS bucket,

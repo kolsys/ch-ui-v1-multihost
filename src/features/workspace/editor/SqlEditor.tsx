@@ -7,7 +7,8 @@ import {
   createMonacoEditor,
 } from "@/features/workspace/editor/monacoConfig";
 import { Button } from "@/components/ui/button";
-import { CirclePlay, Edit3Icon, Save } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { CirclePlay, Edit3Icon, Save, DatabaseIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import {
@@ -28,10 +29,12 @@ interface SQLEditorProps {
 }
 
 const SQLEditor: React.FC<SQLEditorProps> = ({ tabId, onRunQuery }) => {
-  const { getTabById, updateTab, saveQuery, updateSavedQuery, checkSavedQueriesStatus, isAdmin } =
+  const { getTabById, updateTab, saveQuery, updateSavedQuery, checkSavedQueriesStatus, isAdmin, currentDatabase } =
     useAppStore();
   const editorRef = useRef<HTMLDivElement>(null);
   const monacoRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+  const pendingContentRef = useRef<string | null>(null);
+  const updateTabTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tab = getTabById(tabId);
   const { theme } = useTheme();
   const [isEditing, setIsEditing] = useState(false);
@@ -55,7 +58,15 @@ const SQLEditor: React.FC<SQLEditorProps> = ({ tabId, onRunQuery }) => {
 
       const changeListener = editor.onDidChangeModelContent(() => {
         const newContent = editor.getValue();
-        updateTab(tabId, { content: newContent });
+        pendingContentRef.current = newContent;
+        if (updateTabTimeoutRef.current) {
+          clearTimeout(updateTabTimeoutRef.current);
+        }
+        updateTabTimeoutRef.current = setTimeout(() => {
+          updateTab(tabId, { content: pendingContentRef.current as string });
+          pendingContentRef.current = null;
+          updateTabTimeoutRef.current = null;
+        }, 300);
       });
 
       editor.addCommand(
@@ -65,6 +76,14 @@ const SQLEditor: React.FC<SQLEditorProps> = ({ tabId, onRunQuery }) => {
 
       return () => {
         changeListener.dispose();
+        if (updateTabTimeoutRef.current) {
+          clearTimeout(updateTabTimeoutRef.current);
+          updateTabTimeoutRef.current = null;
+        }
+        if (pendingContentRef.current !== null) {
+          updateTab(tabId, { content: pendingContentRef.current });
+          pendingContentRef.current = null;
+        }
         editor.dispose();
       };
     }
@@ -197,6 +216,12 @@ const SQLEditor: React.FC<SQLEditorProps> = ({ tabId, onRunQuery }) => {
             className="h-4 w-4 cursor-pointer hover:text-primary"
             onClick={handleTitleEdit}
           />
+          {currentDatabase && (
+            <Badge variant="outline" className="gap-1 font-normal text-muted-foreground">
+              <DatabaseIcon className="h-3 w-3" />
+              {currentDatabase}
+            </Badge>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <Button variant="link" onClick={handleRunQuery} className="gap-2">

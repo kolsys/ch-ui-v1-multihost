@@ -87,6 +87,7 @@ interface CoreState {
   error: string;
   credentialSource: "env" | "app" | null;
   clickhouseSettings: ClickHouseSettings;
+  currentDatabase: string | null;
 }
 
 interface WorkspaceState {
@@ -122,12 +123,14 @@ export interface AppState
     ExplorerState,
     AdminState {
   setCredential: (credential: Credential) => Promise<void>;
+  setCurrentDatabase: (database: string) => Promise<void>;
   saveConnection: (connection: SavedConnection) => void;
   deleteConnection: (id: string) => void;
   switchConnection: (id: string) => Promise<void>;
   clearCredentials: () => Promise<void>;
   checkServerStatus: () => Promise<void>;
   runQuery: (query: string, tabId?: string) => Promise<QueryResult>;
+  runQueryWithFormat: (query: string, format: string) => Promise<ArrayBuffer>;
   initializeApp: () => Promise<void>;
   setCredentialSource: (source: "env" | "app") => void;
   updateConfiguration: (clickhouseSettings: ClickHouseSettings) => void;

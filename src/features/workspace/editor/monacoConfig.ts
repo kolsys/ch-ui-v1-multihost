@@ -4,12 +4,14 @@ import * as monaco from "monaco-editor";
 import { format } from "sql-formatter";
 import { appQueries } from "./appQueries";
 import { parseCustomParams } from "@/lib/connectionParams";
+import { readCompressedLocalStorageItem } from "@/lib/compressedStorage";
+import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 
 // Add this declaration to extend the Window interface
 declare global {
   interface Window {
     MonacoEnvironment?: {
-      getWorkerUrl: () => string;
+      getWorker: (moduleId: string, label: string) => Worker;
     };
   }
 }
@@ -19,7 +21,7 @@ let isInitialized = false;
 // Initialize ClickHouse client
 let client: any = null;
 
-const appStore = localStorage.getItem("app-storage");
+const appStore = readCompressedLocalStorageItem("app-storage");
 const state = appStore ? JSON.parse(appStore) : {};
 const credential = state.state?.credential || {};
 
@@ -66,7 +68,7 @@ export async function retryInitialization(
     }
     console.log(`Retrying initialization... Attempt ${i + 1}`);
     // get the latest app store
-    const appStore = localStorage.getItem("app-storage");
+    const appStore = readCompressedLocalStorageItem("app-storage");
     const state = appStore ? JSON.parse(appStore) : {};
     const credential = state.state?.credential || {};
     initializeClickHouseClient(appStore, state, credential);
@@ -130,7 +132,7 @@ let keywordsCache: string[] | null = null;
  * active connection changes, so autocomplete reflects the new server.
  */
 export function reinitializeMonacoClient(): void {
-  const appStore = localStorage.getItem("app-storage");
+  const appStore = readCompressedLocalStorageItem("app-storage");
   const state = appStore ? JSON.parse(appStore) : {};
   const credential = state.state?.credential || {};
   client = null;
@@ -142,9 +144,8 @@ export function reinitializeMonacoClient(): void {
 
 // Setting up the Monaco Environment to use the editor worker
 window.MonacoEnvironment = {
-  getWorkerUrl() {
-    return new URL("../../worker/monaco-editor-worker.js", import.meta.url)
-      .href;
+  getWorker() {
+    return new EditorWorker();
   },
 };
 
@@ -152,9 +153,8 @@ window.MonacoEnvironment = {
 function ensureMonacoEnvironment() {
   if (typeof window.MonacoEnvironment === "undefined") {
     window.MonacoEnvironment = {
-      getWorkerUrl() {
-        return new URL("../../worker/monaco-editor-worker.js", import.meta.url)
-          .href;
+      getWorker() {
+        return new EditorWorker();
       },
     };
   }
@@ -241,6 +241,16 @@ async function getKeywords(): Promise<string[]> {
   }
 }
 
+function getCurrentDatabaseFromStorage(): string | null {
+  try {
+    const appStore = readCompressedLocalStorageItem("app-storage");
+    const parsed = appStore ? JSON.parse(appStore) : null;
+    return parsed?.state?.currentDatabase || null;
+  } catch {
+    return null;
+  }
+}
+
 // Parse the SQL query to determine the context
 function parseQueryContext(
   query: string,
@@ -306,6 +316,7 @@ export const initializeMonacoGlobally = async () => {
 
   // Set monarch tokens provider for SQL syntax highlighting
   monaco.languages.setMonarchTokensProvider("sql", {
+    ignoreCase: true,
     keywords: [
       "SELECT",
       "FROM",
@@ -383,6 +394,7 @@ export const initializeMonacoGlobally = async () => {
 
       const dbStructure = await getDatabasesTablesAndColumns();
       const queryContext = parseQueryContext(model.getValue(), position);
+      const currentDatabase = getCurrentDatabaseFromStorage();
       const clickHouseFunctionsArray = await getFunctions();
       const clickHouseKeywordsArray = await getKeywords(); // Fetch keywords from API
 
@@ -407,7 +419,8 @@ export const initializeMonacoGlobally = async () => {
 
           if (
             queryContext.isTypingDatabase ||
-            database.name === queryContext.database
+            database.name === queryContext.database ||
+            (!queryContext.database && database.name === currentDatabase)
           ) {
             database.children.forEach((table: Table) => {
               if (
